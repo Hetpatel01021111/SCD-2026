@@ -150,7 +150,7 @@ Reports precision, recall, F1, and FPR for each.
 Combines the best detectors (Spectral ∪ KNN), removes flagged samples, retrains from scratch, and verifies the backdoor ASR drops to near zero.
 
 ### Experiment 5: Full Demo
-All four phases in one script — ideal for live demonstration:
+All four phases in one script:
 1. Train on poisoned data (looks normal)
 2. Trigger the backdoor (high ASR)
 3. Run the scanner (detection metrics)
