@@ -13,10 +13,11 @@ from models.resnet import build_resnet18
 from utils.data_loader import (build_poisoned_loader, build_poisoned_raw_loader,
                                build_label_corrected_loader, get_clean_loaders,
                                get_test_transform, CleanIndexDataset, CIFAR10_CLASSES)
-from utils.train_eval import train_model, evaluate, predict_indexed_probabilities
+from utils.train_eval import train_model, evaluate
 from utils.metrics import print_detection_report
 from utils.logger import ExperimentLogger
 from detection.nn_label_agreement import detect_nn_label_agreement
+from detection.cleanlab_labels import detect_label_issues_oof
 
 
 def set_seed():
@@ -58,28 +59,26 @@ def run():
     log.record("poisoned_test_accuracy", flip_acc)
     log.record("n_poisoned_samples", len(poison_indices))
 
-    # Detector-corrector: KNN agreement identifies suspicious observations;
-    # a separately trained clean reference supplies only high-confidence
-    # replacements for the configured transition.
-    print("\n[3/4] KNN + high-confidence label correction …")
+    # Detector-corrector: Cleanlab uses out-of-fold predictions, so each
+    # sample is scored by a model that did not train on that sample.
+    print("\n[3/4] Cleanlab out-of-fold label correction …")
     raw_loader = build_poisoned_raw_loader(poison_indices, poison_fn)
     raw_base = datasets.CIFAR10(config.DATA_DIR, train=True, download=True)
     from utils.data_loader import PoisonedDataset
     observed_ds = PoisonedDataset(raw_base, poison_indices, poison_fn, transform=None)
     observed_labels = [observed_ds[i][1] for i in range(len(observed_ds))]
-    corrections = {}
-    # Restrict repair to the configured transition and a high-confidence
-    # reference prediction, leaving all uncertain samples unchanged.
-    knn_flagged, _, _ = detect_nn_label_agreement(flipped_model, raw_loader)
-    teacher_probs = predict_indexed_probabilities(clean_model, raw_loader)
-    for idx in knn_flagged:
-        if (observed_labels[idx] == config.LABEL_FLIP_TARGET
-                and int(teacher_probs[idx].argmax()) == config.LABEL_FLIP_SOURCE
-                and float(teacher_probs[idx][config.LABEL_FLIP_SOURCE]) >= 0.80):
-            corrections[idx] = config.LABEL_FLIP_SOURCE
+    corrections, issue_ids, probabilities = detect_label_issues_oof(
+        observed_ds, observed_labels, confidence=0.50
+    )
+    corrections = {
+        int(idx): int(label) for idx, label in corrections.items()
+        if observed_labels[int(idx)] == config.LABEL_FLIP_TARGET
+        and label == config.LABEL_FLIP_SOURCE
+        and float(probabilities[int(idx), label]) >= 0.50
+    }
     flagged = set(corrections)
     detector_report = print_detection_report(
-        "Label-Flip KNN + Reference Detector", flagged, poison_indices, 50_000
+        "Label-Flip Cleanlab OOF Detector", flagged, poison_indices, 50_000
     )
     corrected_model = build_resnet18(compile_model=True)
     corrected_model, corrected_history = train_model(
@@ -91,9 +90,9 @@ def run():
     print(f"  Label-corrected — Loss: {corrected_loss:.4f}  Acc: {corrected_acc:.2f}%")
     log.record("label_detector_report", detector_report)
     log.record("n_label_detector_flagged", len(flagged))
-    log.record("n_label_issue_candidates", len(corrections))
+    log.record("n_label_issue_candidates", len(issue_ids))
     log.record("n_label_corrected", len(corrections))
-    log.record("label_detector_method", "KNN agreement + high-confidence reference prediction")
+    log.record("label_detector_method", "Cleanlab Confident Learning, 3-fold OOF, confidence >= 0.50")
     log.record("label_corrected_training_history", corrected_history)
     log.record("label_corrected_test_loss", corrected_loss)
     log.record("label_corrected_test_accuracy", corrected_acc)
