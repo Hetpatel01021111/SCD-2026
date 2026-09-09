@@ -73,10 +73,19 @@ def run():
     raw_loader = build_poisoned_raw_loader(poison_indices, poison_fn)
     spec_flagged, _, _, _ = detect_spectral_signatures(poisoned_model, raw_loader)
     knn_flagged, _, _ = detect_nn_label_agreement(poisoned_model, raw_loader)
-    # The union is retained as a comparison, but the default cleaning policy
-    # uses the lower false-positive spectral detector alone.
-    combined = spec_flagged
-    report = print_detection_report("Spectral Signatures (selected)", combined, poison_indices, n_total)
+    spec_report = print_detection_report("Spectral Signatures", spec_flagged, poison_indices, n_total)
+    knn_report = print_detection_report("KNN Agreement", knn_flagged, poison_indices, n_total)
+    eligible = [("spectral_signatures", spec_report, spec_flagged),
+                ("knn_label_agreement", knn_report, knn_flagged)]
+    eligible = [item for item in eligible if item[1]["fpr"] <= 0.05]
+    selected_name, report, combined = max(
+        eligible, key=lambda item: item[1]["f1"]
+    ) if eligible else min(
+        [("spectral_signatures", spec_report, spec_flagged),
+         ("knn_label_agreement", knn_report, knn_flagged)],
+        key=lambda item: item[1]["fpr"]
+    )
+    print(f"  Selected defense: {selected_name} (FPR={report['fpr']:.3%})")
     log.record("detection_report", report)
     log.record("n_flagged", len(combined))
 
@@ -89,7 +98,7 @@ def run():
                                   poison_fn=poison_fn),
     )
     log.record("comparison_union_flagged", len(spec_flagged | knn_flagged))
-    log.record("selected_defense", "spectral_signatures")
+    log.record("selected_defense", selected_name)
     torch.save(cleaned_model.state_dict(), os.path.join(config.MODEL_DIR, "cleaned.pt"))
     _, cleaned_acc = evaluate(cleaned_model, test_loader)
     asr_after = evaluate_backdoor_asr(cleaned_model, test_loader, apply_trigger_to_tensor)
