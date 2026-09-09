@@ -10,6 +10,8 @@ import sys
 import time
 import argparse
 import os
+import json
+import subprocess
 
 
 EXPERIMENTS = {
@@ -48,12 +50,38 @@ def main():
             os.makedirs(path, exist_ok=True)
     selected = args.experiments or list(EXPERIMENTS.keys())
 
+    manifest_path = os.path.join(config.OUTPUT_DIR, "run_manifest.json")
+    manifest_key = {
+        "experiments": selected,
+        "seed": config.SEED,
+        "poison_rate": config.POISON_RATE,
+        "epochs": config.EPOCHS,
+    }
+    try:
+        manifest_key["git_revision"] = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True).strip()
+    except (OSError, subprocess.CalledProcessError):
+        manifest_key["git_revision"] = "unknown"
+    if args.resume and os.path.exists(manifest_path):
+        with open(manifest_path) as f:
+            previous = json.load(f)
+        if previous.get("config") != manifest_key:
+            parser.error("--resume requested, but the existing manifest configuration differs")
+        completed_prior = set(previous.get("completed_experiments", []))
+        selected = [i for i in selected if i not in completed_prior]
+    elif args.resume and not os.path.exists(manifest_path):
+        parser.error("--resume requested, but no run_manifest.json exists")
+    else:
+        with open(manifest_path, "w") as f:
+            json.dump({"status": "running", "config": manifest_key}, f, indent=2)
+
     print("╔" + "═" * 58 + "╗")
     print("║   DATA POISONING & DETECTION — EXPERIMENT RUNNER         ║")
     print("╚" + "═" * 58 + "╝")
     print(f"\n  Experiments to run: {selected}")
     print(f"  Logs directory: outputs/logs/\n")
 
+    completed = list(completed_prior) if args.resume else []
     for exp_id in selected:
         if exp_id not in EXPERIMENTS:
             print(f"  [SKIP] Unknown experiment ID: {exp_id}")
@@ -67,10 +95,14 @@ def main():
         t0 = time.time()
         mod = __import__(module_path, fromlist=["run"])
         mod.run()
+        completed.append(exp_id)
         elapsed = time.time() - t0
 
         print(f"  ⏱  Experiment {exp_id} completed in {elapsed:.1f}s\n")
 
+    with open(manifest_path, "w") as f:
+        json.dump({"status": "complete", "config": manifest_key,
+                   "completed_experiments": completed}, f, indent=2)
     print("All selected experiments finished.")
     print("Run `python scripts/generate_graphs.py` to produce comparison charts from logs.")
 
