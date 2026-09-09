@@ -22,5 +22,11 @@ done
 run_set 42 0.01
 run_set 42 0.10
 
-"$PYTHON" "$ROOT/scripts/generate_graphs.py"
+"$PYTHON" - <<PY
+import config
+config.LOG_DIR = "$OUT/seed-42-rate-005/logs"
+config.PLOT_DIR = "$OUT/seed-42-rate-005/plots"
+from scripts.generate_graphs import main
+main()
+PY
 echo "Validated campaign complete: $OUT"
