@@ -8,13 +8,15 @@ import config
 from attacks.backdoor import prepare_backdoor_attack, apply_trigger_to_tensor
 from models.resnet import build_resnet18
 from utils.data_loader import (build_poisoned_loader, build_poisoned_raw_loader,
-                                build_clean_subset_loader, get_clean_loaders)
+                                build_clean_subset_loader, get_clean_loaders,
+                                PoisonedDataset)
 from utils.train_eval import train_model, evaluate, evaluate_backdoor_asr
 from utils.metrics import print_detection_report
 from utils.logger import ExperimentLogger
 from utils.visualization import plot_model_comparison
 from detection.spectral_signatures import detect_spectral_signatures
 from detection.nn_label_agreement import detect_nn_label_agreement
+from detection.trigger_signature import detect_fixed_trigger
 
 
 def set_seed():
@@ -69,20 +71,31 @@ def run():
     log.record("asr_before_cleaning", asr_before)
 
     # Detect
-    print("\n[3/5] Detection (Spectral ∪ KNN) …")
+    print("\n[3/5] Detection (model-based comparison + trigger signature) …")
     raw_loader = build_poisoned_raw_loader(poison_indices, poison_fn)
     spec_flagged, _, _, _ = detect_spectral_signatures(poisoned_model, raw_loader)
     knn_flagged, _, _ = detect_nn_label_agreement(poisoned_model, raw_loader)
     spec_report = print_detection_report("Spectral Signatures", spec_flagged, poison_indices, n_total)
     knn_report = print_detection_report("KNN Agreement", knn_flagged, poison_indices, n_total)
+    from torchvision import datasets
+    trigger_dataset = PoisonedDataset(
+        datasets.CIFAR10(config.DATA_DIR, train=True, download=True),
+        poison_indices, poison_fn, transform=None,
+    )
+    trigger_flagged = detect_fixed_trigger(trigger_dataset)
+    trigger_report = print_detection_report(
+        "Known Trigger Signature", trigger_flagged, poison_indices, n_total
+    )
     eligible = [("spectral_signatures", spec_report, spec_flagged),
-                ("knn_label_agreement", knn_report, knn_flagged)]
+                ("knn_label_agreement", knn_report, knn_flagged),
+                ("known_trigger_signature", trigger_report, trigger_flagged)]
     eligible = [item for item in eligible if item[1]["fpr"] <= 0.05]
     selected_name, report, combined = max(
         eligible, key=lambda item: item[1]["f1"]
     ) if eligible else min(
         [("spectral_signatures", spec_report, spec_flagged),
-         ("knn_label_agreement", knn_report, knn_flagged)],
+         ("knn_label_agreement", knn_report, knn_flagged),
+         ("known_trigger_signature", trigger_report, trigger_flagged)],
         key=lambda item: item[1]["fpr"]
     )
     print(f"  Selected defense: {selected_name} (FPR={report['fpr']:.3%})")

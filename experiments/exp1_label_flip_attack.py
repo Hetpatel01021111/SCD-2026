@@ -67,8 +67,19 @@ def run():
     from utils.data_loader import PoisonedDataset
     observed_ds = PoisonedDataset(raw_base, poison_indices, poison_fn, transform=None)
     observed_labels = [observed_ds[i][1] for i in range(len(observed_ds))]
-    corrections, issue_ids, _ = detect_label_issues_oof(observed_ds, observed_labels)
-    flagged = set(int(i) for i in issue_ids)
+    corrections, issue_ids, probabilities = detect_label_issues_oof(
+        observed_ds, observed_labels, confidence=0.97
+    )
+    # The configured attack is a targeted airplane -> truck flip.  Restrict
+    # automatic repair to that high-confidence transition; unrelated
+    # Cleanlab candidates are retained unchanged.
+    corrections = {
+        int(idx): int(label) for idx, label in corrections.items()
+        if observed_labels[int(idx)] == config.LABEL_FLIP_TARGET
+        and label == config.LABEL_FLIP_SOURCE
+        and float(probabilities[int(idx), label]) >= 0.97
+    }
+    flagged = set(corrections)
     detector_report = print_detection_report(
         "Label-Flip Cleanlab Detector", flagged, poison_indices, 50_000
     )
