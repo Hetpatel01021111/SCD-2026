@@ -120,7 +120,11 @@ def run():
     log.record("n_flagged", len(combined))
 
     cleaned_model = build_resnet18(compile_model=True)
-    cleaned_model, ch = train_model(cleaned_model, build_clean_subset_loader(combined))
+    cleaned_model, ch = train_model(
+        cleaned_model,
+        build_clean_subset_loader(combined, poison_indices=bd_indices,
+                                  poison_fn=bd_fn),
+    )
     _, cleaned_acc = evaluate(cleaned_model, test_loader)
     asr_after = evaluate_backdoor_asr(cleaned_model, test_loader, apply_trigger_to_tensor)
     log.record("cleaned_training_history", ch)

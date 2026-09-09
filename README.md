@@ -180,3 +180,25 @@ All four phases in one script:
 - Tran, B., Li, J., & Madry, A. (2018). *Spectral Signatures in Backdoor Attacks*. NeurIPS.
 - Chen, B., et al. (2019). *Detecting Backdoor Attacks on Deep Neural Networks by Activation Clustering*.
 - Gu, T., Dolan-Gavitt, B., & Garg, S. (2017). *BadNets: Identifying Vulnerabilities in the ML Supply Chain*.
+# Validation notes
+
+The original pre-validation results are preserved on
+`codex/pre-validation-snapshot-2026-09-09`. Those results are historical: the
+old cleaning loaders rebuilt data from the clean CIFAR-10 labels, so missed
+poison could disappear during retraining. The validated branch keeps the
+observed poisoned image and label for every unselected sample.
+
+Label correction uses Cleanlab Confident Learning with out-of-fold model
+probabilities. Backdoor detection uses spectral signatures as the selected
+cleaning policy, with activation clustering, loss outliers and KNN retained as
+comparison baselines. Detection reports are compared with matched random
+removal controls.
+
+Install the complete environment with `pip install -r requirements.txt` and
+run a reproducible experiment set with:
+
+    python run_all.py 0 1 2 3 4 --seed 42 --poison-rate 0.05 \
+        --run-dir outputs/validated/seed-42-rate-05
+
+The untouched CIFAR-10 test set is used for final accuracy. Backdoor ASR is
+reported separately on non-target test images after applying the trigger.

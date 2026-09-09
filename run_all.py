@@ -8,6 +8,8 @@ Usage:
 
 import sys
 import time
+import argparse
+import os
 
 
 EXPERIMENTS = {
@@ -21,11 +23,30 @@ EXPERIMENTS = {
 
 
 def main():
-    # Parse which experiments to run from CLI args
-    if len(sys.argv) > 1:
-        selected = [int(x) for x in sys.argv[1:]]
-    else:
-        selected = list(EXPERIMENTS.keys())
+    parser = argparse.ArgumentParser(description="Run poisoning experiments")
+    parser.add_argument("experiments", nargs="*", type=int, choices=EXPERIMENTS.keys())
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--poison-rate", type=float, default=None)
+    parser.add_argument("--run-dir", default=None,
+                        help="directory for this run's logs, plots and models")
+    parser.add_argument("--resume", action="store_true",
+                        help="reserved for manifest-compatible completed runs")
+    args = parser.parse_args()
+    import config
+    if args.seed is not None:
+        config.SEED = args.seed
+    if args.poison_rate is not None:
+        if not 0.0 <= args.poison_rate <= 1.0:
+            parser.error("--poison-rate must be between 0 and 1")
+        config.POISON_RATE = args.poison_rate
+    if args.run_dir:
+        config.OUTPUT_DIR = os.path.abspath(args.run_dir)
+        config.LOG_DIR = os.path.join(config.OUTPUT_DIR, "logs")
+        config.PLOT_DIR = os.path.join(config.OUTPUT_DIR, "plots")
+        config.MODEL_DIR = os.path.join(config.OUTPUT_DIR, "models")
+        for path in (config.LOG_DIR, config.PLOT_DIR, config.MODEL_DIR):
+            os.makedirs(path, exist_ok=True)
+    selected = args.experiments or list(EXPERIMENTS.keys())
 
     print("╔" + "═" * 58 + "╗")
     print("║   DATA POISONING & DETECTION — EXPERIMENT RUNNER         ║")

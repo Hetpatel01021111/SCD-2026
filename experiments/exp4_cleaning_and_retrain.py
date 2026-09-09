@@ -73,15 +73,23 @@ def run():
     raw_loader = build_poisoned_raw_loader(poison_indices, poison_fn)
     spec_flagged, _, _, _ = detect_spectral_signatures(poisoned_model, raw_loader)
     knn_flagged, _, _ = detect_nn_label_agreement(poisoned_model, raw_loader)
-    combined = spec_flagged | knn_flagged
-    report = print_detection_report("Combined (Spectral ∪ KNN)", combined, poison_indices, n_total)
+    # The union is retained as a comparison, but the default cleaning policy
+    # uses the lower false-positive spectral detector alone.
+    combined = spec_flagged
+    report = print_detection_report("Spectral Signatures (selected)", combined, poison_indices, n_total)
     log.record("detection_report", report)
     log.record("n_flagged", len(combined))
 
     # Retrain
     print("[4/5] Retraining on cleaned data …")
     cleaned_model = build_resnet18(compile_model=True)
-    cleaned_model, ch = train_model(cleaned_model, build_clean_subset_loader(combined))
+    cleaned_model, ch = train_model(
+        cleaned_model,
+        build_clean_subset_loader(combined, poison_indices=poison_indices,
+                                  poison_fn=poison_fn),
+    )
+    log.record("comparison_union_flagged", len(spec_flagged | knn_flagged))
+    log.record("selected_defense", "spectral_signatures")
     torch.save(cleaned_model.state_dict(), os.path.join(config.MODEL_DIR, "cleaned.pt"))
     _, cleaned_acc = evaluate(cleaned_model, test_loader)
     asr_after = evaluate_backdoor_asr(cleaned_model, test_loader, apply_trigger_to_tensor)

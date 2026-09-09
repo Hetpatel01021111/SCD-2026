@@ -21,7 +21,12 @@ def select_flip_indices(dataset, source_class=config.LABEL_FLIP_SOURCE,
     """Return indices of source-class samples to flip."""
     rng = random.Random(seed)
     source_indices = [i for i, (_, lbl) in enumerate(dataset) if lbl == source_class]
-    n_poison = min(int(len(dataset) * poison_rate), len(source_indices))
+    n_poison = int(len(dataset) * poison_rate)
+    if n_poison > len(source_indices):
+        raise ValueError(
+            f"Requested {n_poison} flips but source class contains only "
+            f"{len(source_indices)} samples"
+        )
     return set(rng.sample(source_indices, n_poison))
 
 

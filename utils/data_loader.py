@@ -95,11 +95,13 @@ class LabelCorrectedDataset(Dataset):
         return len(self.base)
 
     def __getitem__(self, idx):
-        image, label = self.base[idx]
+        item = self.base[idx]
+        image, label = item[0], item[1]
+        sample_id = item[2] if len(item) > 2 else idx
         label = self.corrections.get(idx, label)
         if self.transform:
             image = self.transform(image)
-        return image, label, idx
+        return image, label, sample_id
 
 
 def _make_loader(dataset, batch_size, shuffle):
@@ -144,16 +146,32 @@ def build_poisoned_raw_loader(poison_indices, poison_fn):
     return _make_loader(ds, config.EVAL_BATCH_SIZE, False)
 
 
-def build_clean_subset_loader(exclude_indices):
-    """Training loader that excludes the given indices (post-cleaning)."""
+def build_clean_subset_loader(exclude_indices, poison_indices=None, poison_fn=None):
+    """Training loader that excludes IDs from the supplied training dataset.
+
+    If an attack is supplied, the poisoned image and observed poisoned label
+    are retained for every sample that was *not* selected by the detector.
+    This prevents cleaning from accidentally restoring hidden ground truth.
+    """
     base = datasets.CIFAR10(config.DATA_DIR, train=True, download=True)
     keep = [i for i in range(len(base)) if i not in exclude_indices]
-    ds = CleanIndexDataset(Subset(base, keep), transform=get_train_transform())
+    if poison_indices is not None and poison_fn is None:
+        raise ValueError("poison_fn is required when poison_indices is supplied")
+    if poison_indices is not None:
+        ds = PoisonedDataset(Subset(base, keep),
+                             {keep.index(i) for i in poison_indices if i in keep},
+                             poison_fn, get_train_transform())
+    else:
+        ds = CleanIndexDataset(Subset(base, keep), transform=get_train_transform())
     return _make_loader(ds, config.BATCH_SIZE, True)
 
 
-def build_label_corrected_loader(corrections):
-    """Training loader with only the supplied labels replaced."""
+def build_label_corrected_loader(corrections, poison_indices=None, poison_fn=None):
+    """Training loader preserving poisoned observations and selected fixes."""
     base = datasets.CIFAR10(config.DATA_DIR, train=True, download=True)
-    ds = LabelCorrectedDataset(base, corrections, transform=get_train_transform())
+    if poison_indices is not None and poison_fn is None:
+        raise ValueError("poison_fn is required when poison_indices is supplied")
+    source = base if poison_indices is None else PoisonedDataset(
+        base, poison_indices, poison_fn, transform=None)
+    ds = LabelCorrectedDataset(source, corrections, transform=get_train_transform())
     return _make_loader(ds, config.BATCH_SIZE, True)

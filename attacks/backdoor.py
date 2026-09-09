@@ -28,7 +28,12 @@ def select_backdoor_indices(dataset, target_label=config.BACKDOOR_TARGET_LABEL,
     """Choose random non-target samples to receive the trigger."""
     rng = random.Random(seed)
     eligible = [i for i, (_, lbl) in enumerate(dataset) if lbl != target_label]
-    n_poison = min(int(len(dataset) * poison_rate), len(eligible))
+    n_poison = int(len(dataset) * poison_rate)
+    if n_poison > len(eligible):
+        raise ValueError(
+            f"Requested {n_poison} backdoor samples but only "
+            f"{len(eligible)} non-target samples are eligible"
+        )
     return set(rng.sample(eligible, n_poison))
 
 

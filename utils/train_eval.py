@@ -100,6 +100,21 @@ def predict_indexed_labels(model, loader, device=config.DEVICE):
 
 
 @torch.no_grad()
+def predict_indexed_probabilities(model, loader, device=config.DEVICE):
+    """Return out-of-sample-compatible class probabilities keyed by ID."""
+    model.eval()
+    model = model.to(device)
+    predictions = {}
+    for batch in loader:
+        images, _, indices = batch[0].to(device), batch[1], batch[2]
+        with autocast(enabled=config.USE_AMP):
+            probabilities = model(images).softmax(dim=1).float().cpu()
+        predictions.update({int(i): row.numpy() for i, row in
+                           zip(indices.tolist(), probabilities)})
+    return predictions
+
+
+@torch.no_grad()
 def evaluate_backdoor_asr(model, test_loader, trigger_fn,
                           target_label=config.BACKDOOR_TARGET_LABEL,
                           device=config.DEVICE):
