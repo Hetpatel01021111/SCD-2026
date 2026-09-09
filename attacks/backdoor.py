@@ -1,4 +1,4 @@
-"""Backdoor trigger-patch attack: stamps a white patch and relabels."""
+"""BadNets-style backdoor attack: stamps a trigger patch and relabels."""
 
 import random
 from typing import Callable, Set, Tuple
@@ -13,7 +13,7 @@ import config
 
 
 def apply_trigger_patch(image, patch_size=config.BACKDOOR_PATCH_SIZE):
-    """Stamp a white patch in the bottom-right corner of a PIL Image."""
+    """Stamp the standard fixed white trigger in the bottom-right corner."""
     img = image.copy()
     pixels = img.load()
     w, h = img.size

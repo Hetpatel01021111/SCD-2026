@@ -14,16 +14,25 @@ import config
 class ExperimentLogger:
     """Accumulates results and writes them as a JSON file to outputs/logs/."""
 
-    def __init__(self, experiment_name: str):
+    def __init__(self, experiment_name: str, poison_rate: Optional[float] = None):
+        """Create a logger for one experiment.
+
+        ``config.POISON_RATE`` is the default rate used by attack helpers, but
+        not every experiment uses an attack.  Callers can override it for
+        experiments such as the clean baseline so the metadata reflects the
+        data that was actually used.
+        """
         self.name = experiment_name
         self.start_time = time.time()
+        if poison_rate is None:
+            poison_rate = config.POISON_RATE
         self.data = {
             "experiment": experiment_name,
             "started_at": datetime.now().isoformat(),
             "config": {
                 "seed": config.SEED, "epochs": config.EPOCHS,
                 "batch_size": config.BATCH_SIZE, "learning_rate": config.LEARNING_RATE,
-                "poison_rate": config.POISON_RATE, "device": str(config.DEVICE),
+                "poison_rate": poison_rate, "device": str(config.DEVICE),
             },
             "results": {},
         }

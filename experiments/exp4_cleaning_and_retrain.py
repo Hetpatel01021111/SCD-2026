@@ -37,7 +37,16 @@ def run():
     baseline_path = os.path.join(config.MODEL_DIR, "clean_baseline.pt")
     clean_model = build_resnet18(compile_model=False)
     if os.path.exists(baseline_path):
-        clean_model.load_state_dict(torch.load(baseline_path, map_location="cpu"))
+        # Experiment 1 may have saved a torch.compile() state dict. Compiled
+        # checkpoints prefix every parameter with ``_orig_mod.``; remove that
+        # wrapper prefix before loading into the plain ResNet used here.
+        checkpoint = torch.load(baseline_path, map_location="cpu")
+        if checkpoint and all(key.startswith("_orig_mod.") for key in checkpoint):
+            checkpoint = {
+                key.removeprefix("_orig_mod."): value
+                for key, value in checkpoint.items()
+            }
+        clean_model.load_state_dict(checkpoint)
         print("  Loaded cached baseline.")
     else:
         train_loader, _ = get_clean_loaders()

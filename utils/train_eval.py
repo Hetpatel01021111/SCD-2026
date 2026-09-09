@@ -86,6 +86,20 @@ def evaluate(model, loader, device=config.DEVICE):
 
 
 @torch.no_grad()
+def predict_indexed_labels(model, loader, device=config.DEVICE):
+    """Return model predictions keyed by the sample indices from a loader."""
+    model.eval()
+    model = model.to(device)
+    predictions = {}
+    for batch in loader:
+        images, _, indices = batch[0].to(device), batch[1], batch[2]
+        with autocast(enabled=config.USE_AMP):
+            predicted = model(images).argmax(dim=1).cpu().tolist()
+        predictions.update({int(i): int(label) for i, label in zip(indices.tolist(), predicted)})
+    return predictions
+
+
+@torch.no_grad()
 def evaluate_backdoor_asr(model, test_loader, trigger_fn,
                           target_label=config.BACKDOOR_TARGET_LABEL,
                           device=config.DEVICE):

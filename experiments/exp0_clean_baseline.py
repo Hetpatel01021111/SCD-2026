@@ -22,7 +22,9 @@ def set_seed():
 
 def run():
     set_seed()
-    log = ExperimentLogger("exp0_clean_baseline")
+    # This experiment intentionally uses no attack samples.  Override the
+    # global attack default in the log so its metadata reports the true rate.
+    log = ExperimentLogger("exp0_clean_baseline", poison_rate=0.0)
     print("=" * 60)
     print("  EXPERIMENT 0: Clean Baseline")
     print("=" * 60)

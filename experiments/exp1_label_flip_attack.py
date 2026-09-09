@@ -10,9 +10,13 @@ from torchvision import datasets
 import config
 from attacks.label_flip import prepare_label_flip_attack
 from models.resnet import build_resnet18
-from utils.data_loader import build_poisoned_loader, get_clean_loaders, get_test_transform, CleanIndexDataset, CIFAR10_CLASSES
-from utils.train_eval import train_model, evaluate
+from utils.data_loader import (build_poisoned_loader, build_poisoned_raw_loader,
+                               build_label_corrected_loader, get_clean_loaders,
+                               get_test_transform, CleanIndexDataset, CIFAR10_CLASSES)
+from utils.train_eval import train_model, evaluate, predict_indexed_labels
+from utils.metrics import print_detection_report
 from utils.logger import ExperimentLogger
+from detection.nn_label_agreement import detect_nn_label_agreement
 
 
 def set_seed():
@@ -54,8 +58,35 @@ def run():
     log.record("poisoned_test_accuracy", flip_acc)
     log.record("n_poisoned_samples", len(poison_indices))
 
+    # Detector-corrector: KNN flags suspicious labels, then the independently
+    # trained clean reference model supplies replacement labels.  Both pieces
+    # use established nearest-neighbour/model-prediction correction patterns;
+    # no attack-specific ground-truth labels are used for correction.
+    print("\n[3/4] KNN label detector-corrector …")
+    raw_loader = build_poisoned_raw_loader(poison_indices, poison_fn)
+    flagged, _, detector_indices = detect_nn_label_agreement(flipped_model, raw_loader)
+    detector_report = print_detection_report(
+        "Label-Flip KNN Detector", flagged, poison_indices, 50_000
+    )
+    predicted_labels = predict_indexed_labels(clean_model, raw_loader)
+    corrections = {idx: predicted_labels[idx] for idx in flagged
+                   if idx in predicted_labels}
+    corrected_model = build_resnet18(compile_model=True)
+    corrected_model, corrected_history = train_model(
+        corrected_model, build_label_corrected_loader(corrections)
+    )
+    corrected_loss, corrected_acc = evaluate(corrected_model, test_loader)
+    print(f"  Label-corrected — Loss: {corrected_loss:.4f}  Acc: {corrected_acc:.2f}%")
+    log.record("label_detector_report", detector_report)
+    log.record("n_label_detector_flagged", len(flagged))
+    log.record("n_label_corrected", len(corrections))
+    log.record("label_corrected_training_history", corrected_history)
+    log.record("label_corrected_test_loss", corrected_loss)
+    log.record("label_corrected_test_accuracy", corrected_acc)
+    torch.save(corrected_model.state_dict(), os.path.join(config.MODEL_DIR, "label_corrected.pt"))
+
     # Per-class comparison
-    print("\n[3/3] Per-class accuracy:")
+    print("\n[4/4] Per-class accuracy:")
     print(f"  {'Class':<12s} {'Clean':>8s} {'Flipped':>8s} {'Δ':>8s}")
     print("  " + "─" * 38)
 

@@ -83,6 +83,25 @@ class CleanIndexDataset(Dataset):
         return image, label, idx
 
 
+class LabelCorrectedDataset(Dataset):
+    """Wrapper that replaces labels for detector-selected sample indices."""
+
+    def __init__(self, base_dataset, corrections, transform=None):
+        self.base = base_dataset
+        self.corrections = corrections
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.base)
+
+    def __getitem__(self, idx):
+        image, label = self.base[idx]
+        label = self.corrections.get(idx, label)
+        if self.transform:
+            image = self.transform(image)
+        return image, label, idx
+
+
 def _make_loader(dataset, batch_size, shuffle):
     return DataLoader(
         dataset, batch_size=batch_size, shuffle=shuffle,
@@ -130,4 +149,11 @@ def build_clean_subset_loader(exclude_indices):
     base = datasets.CIFAR10(config.DATA_DIR, train=True, download=True)
     keep = [i for i in range(len(base)) if i not in exclude_indices]
     ds = CleanIndexDataset(Subset(base, keep), transform=get_train_transform())
+    return _make_loader(ds, config.BATCH_SIZE, True)
+
+
+def build_label_corrected_loader(corrections):
+    """Training loader with only the supplied labels replaced."""
+    base = datasets.CIFAR10(config.DATA_DIR, train=True, download=True)
+    ds = LabelCorrectedDataset(base, corrections, transform=get_train_transform())
     return _make_loader(ds, config.BATCH_SIZE, True)

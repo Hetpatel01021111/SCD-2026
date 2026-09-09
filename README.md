@@ -57,14 +57,15 @@ Cyber-Defense/
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
-pip install -r requirements.txt
+# 1. Install dependencies (a virtual environment is recommended)
+python -m venv venv
+./venv/bin/pip install -r requirements.txt
 
 # 2. Run all experiments end-to-end (exp0 through exp5)
-python run_all.py
+./venv/bin/python run_all.py
 
 # 3. Generate comparison graphs from the logs
-python scripts/generate_graphs.py
+./venv/bin/python scripts/generate_graphs.py
 ```
 
 ## Running Individual Experiments
@@ -72,18 +73,18 @@ python scripts/generate_graphs.py
 Each experiment is a standalone script that can be run independently:
 
 ```bash
-python -m experiments.exp0_clean_baseline        # clean baseline (run first)
-python -m experiments.exp1_label_flip_attack      # label-flip attack
-python -m experiments.exp2_backdoor_attack        # backdoor trigger attack
-python -m experiments.exp3_detection_pipeline     # all 4 detection methods
-python -m experiments.exp4_cleaning_and_retrain   # clean + retrain
-python -m experiments.exp5_full_demo              # full end-to-end demo
+./venv/bin/python -m experiments.exp0_clean_baseline      # clean baseline (run first)
+./venv/bin/python -m experiments.exp1_label_flip_attack   # label-flip attack
+./venv/bin/python -m experiments.exp2_backdoor_attack     # backdoor trigger attack
+./venv/bin/python -m experiments.exp3_detection_pipeline  # all 4 detection methods
+./venv/bin/python -m experiments.exp4_cleaning_and_retrain # clean + retrain
+./venv/bin/python -m experiments.exp5_full_demo           # full end-to-end demo
 ```
 
 Or pick specific ones via `run_all.py`:
 
 ```bash
-python run_all.py 0 2 3    # run only experiments 0, 2, and 3
+./venv/bin/python run_all.py 0 2 3    # run only experiments 0, 2, and 3
 ```
 
 ## Logging
@@ -101,7 +102,7 @@ outputs/logs/
 ```
 
 Each JSON file contains:
-- **config**: seed, epochs, batch size, learning rate, poison rate, device
+- **config**: seed, epochs, batch size, learning rate, poison rate actually used by that experiment, device
 - **results**: test accuracy, training history (per-epoch loss/accuracy), per-class accuracy, ASR, detection metrics (precision/recall/F1/FPR)
 - **timing**: start time, end time, elapsed seconds
 
@@ -110,10 +111,10 @@ Each JSON file contains:
 After running experiments, generate all comparison charts at once:
 
 ```bash
-python scripts/generate_graphs.py
+./venv/bin/python scripts/generate_graphs.py
 ```
 
-This produces 6 charts in `outputs/plots/`:
+This produces the comparison charts in `outputs/plots/`:
 
 | Chart | What it shows |
 |-------|---------------|
@@ -123,6 +124,9 @@ This produces 6 charts in `outputs/plots/`:
 | `graph_detector_comparison.png` | Precision / Recall / F1 for all 4 detection methods |
 | `graph_per_class_accuracy.png` | Per-class accuracy: clean vs label-flip poisoned |
 | `graph_dashboard.png` | 4-panel summary combining accuracy, ASR, training curves, and detector F1 |
+| `graph_label_flip_detector_corrector.png` | Label-flip accuracy recovery and KNN detector-corrector metrics |
+| `graph_backdoor_detector_corrector.png` | Backdoor accuracy, ASR, and Spectral ∪ KNN cleaning result |
+| `graph_differential_accuracy.png` | Baseline / Label / Backdoor accuracy before and after detector-correction |
 
 The script gracefully skips any chart whose prerequisite logs are missing.
 
@@ -131,11 +135,15 @@ The script gracefully skips any chart whose prerequisite logs are missing.
 ### Experiment 0: Clean Baseline
 Trains a ResNet-18 on unmodified CIFAR-10. Records per-epoch training history and per-class test accuracy. This is the reference for all comparisons.
 
-### Experiment 1: Label-Flip Attack
-Flips labels of one class (airplane → truck) at 5% poison rate. Trains a model and compares per-class accuracy against a clean baseline to show targeted degradation.
+The clean baseline has a 0% poison rate. The global `POISON_RATE = 0.05` setting is an attack default and does not modify this experiment; its log explicitly records `poison_rate: 0.0`.
 
-### Experiment 2: Backdoor Attack
+### Experiment 1: Label-Flip Attack
+Flips labels of one class (airplane → truck) at 5% poison rate. A KNN label-agreement detector identifies suspicious labels, and the clean reference model supplies replacement predictions before retraining the label-corrected model.
+
+### Experiment 2: Backdoor Attack (BadNets-style)
 Injects a 3×3 white trigger patch into 5% of training images and relabels them. Shows the model achieves normal test accuracy but high Attack Success Rate (ASR) when the trigger is present.
+
+The attacks use established benchmark patterns: class-conditional random label flipping and a fixed-patch BadNets-style backdoor. The normal test-accuracy chart does not apply the trigger, so a successful backdoor can have accuracy similar to the clean model; ASR on triggered images is the security measure.
 
 ### Experiment 3: Detection Pipeline
 Runs four independent detectors against the backdoor-poisoned dataset:
@@ -148,6 +156,8 @@ Reports precision, recall, F1, and FPR for each.
 
 ### Experiment 4: Cleaning & Retraining
 Combines the best detectors (Spectral ∪ KNN), removes flagged samples, retrains from scratch, and verifies the backdoor ASR drops to near zero.
+
+Because this experiment uses detector output rather than the ground-truth poison set, false positives can reduce clean-test accuracy. This is an important result of the benchmark: backdoor removal can succeed while the detector still needs better precision. The reported detection metrics should therefore be considered part of the result, not evidence that every flagged sample is poisoned.
 
 ### Experiment 5: Full Demo
 All four phases in one script:
