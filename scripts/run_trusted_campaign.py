@@ -35,6 +35,10 @@ def sha_ids(ids):
 
 
 def train_eval(base, train_ids, labels, poisoned, kind, trusted_ids, seed, epochs, out, name, remove=None, corrections=None, initial_state=None):
+    # Reset initialization and loader RNGs for every paired condition.  A
+    # stable digest avoids Python's process-randomized hash().
+    condition_seed = seed + int(hashlib.sha256(name.encode()).hexdigest()[:8], 16) % 100000
+    seed_everything(condition_seed)
     remove = set(remove or ())
     corrections = dict(corrections or {})
     effective = [i for i in train_ids if i not in remove]
