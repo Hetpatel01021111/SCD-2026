@@ -16,7 +16,8 @@ def detect_fixed_trigger(dataset, patch_size=config.BACKDOOR_PATCH_SIZE,
     """Return IDs whose bottom-right patch is uniformly white within tolerance."""
     flagged = set()
     for idx in range(len(dataset)):
-        image, _ = dataset[idx]
+        item = dataset[idx]
+        image = item[0]
         pixels = np.asarray(image.convert("RGB"), dtype=np.int16)
         patch = pixels[-patch_size:, -patch_size:]
         if np.all(patch >= 255 - tolerance):
