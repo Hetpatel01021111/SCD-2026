@@ -266,3 +266,4 @@ run a reproducible experiment set with:
 
 The untouched CIFAR-10 test set is used for final accuracy. Backdoor ASR is
 reported separately on non-target test images after applying the trigger.
+# SCD-2026
