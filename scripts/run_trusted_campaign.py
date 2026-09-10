@@ -55,7 +55,9 @@ def train_eval(base, train_ids, labels, poisoned, kind, trusted_ids, seed, epoch
 
 def run(args):
     seed_everything(args.seed)
-    out = Path(args.output) / (f"seed-{args.seed}-rate-{args.rate:g}".replace(".", ""))
+    # Include attack in the directory key: label and backdoor campaigns at
+    # the same seed/rate must never overwrite one another.
+    out = Path(args.output) / (f"{args.attack}-seed-{args.seed}-rate-{args.rate:g}".replace(".", ""))
     out.mkdir(parents=True, exist_ok=True)
     base = load_train_base(); test = clean_eval_dataset(load_test_base())
     split = make_stratified_split(base, args.split_seed)

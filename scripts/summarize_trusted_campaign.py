@@ -10,7 +10,7 @@ def main():
     p = argparse.ArgumentParser(); p.add_argument("--output", required=True)
     args = p.parse_args(); root = Path(args.output)
     rows = []
-    for path in sorted(root.glob("seed-*/results.json")):
+    for path in sorted(root.glob("*-seed-*/results.json")):
         data = json.loads(path.read_text())
         if data.get("status") != "complete": continue
         cfg = data["config"]
