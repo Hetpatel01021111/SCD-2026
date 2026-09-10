@@ -2,6 +2,55 @@
 
 A complete pipeline for injecting data-poisoning attacks into CIFAR-10 and detecting the poisoned samples before they compromise a model.
 
+## Judge-ready campaign: what was measured
+
+The latest controlled campaign is implemented on branch
+`codex/trusted-data-defense-pipeline`. It uses a fixed stratified split of 45,000
+attack-pool images, 2,000 trusted clean images and 3,000 development images;
+the untouched 10,000-image CIFAR-10 test set is used only for final evaluation.
+Sample IDs remain the original CIFAR-10 IDs. The defenses receive observed
+images and labels plus the trusted subset; poison membership and original clean
+labels are evaluation-only metadata.
+
+The campaign ran ResNet-18 for 30 epochs with fixed seeds and separate output
+directories for label and backdoor conditions. The 5% results below are means
+across seeds 42, 43 and 44; values are percentages and “pp” means percentage
+points.
+
+| Measure | Baseline | Poisoned | Selected correction | Change from poisoned |
+|---|---:|---:|---:|---:|
+| Label-flip normal accuracy | 88.94 | 86.61 | 87.78 | +1.17 pp |
+| Backdoor normal accuracy | 88.94 | 89.89 | 88.95 | −0.94 pp |
+| Backdoor ASR (lower is better) | — | 96.31 | 83.62 | −12.69 pp |
+
+The label defense recovered 1.17 pp on average but remained 1.16 pp below
+baseline. The backdoor defense preserved normal accuracy within 1 pp of
+baseline on average, but ASR remained far above the ≤5% target. The targets are
+reported as acceptance criteria rather than treated as guaranteed outcomes.
+Generic detector precision, recall, F1 and FPR were not persisted by this
+campaign, so the false-negative target is not claimed as passed. The earlier
+historical run did report weak generic detector performance; its known-trigger
+filter reduced ASR to about 1.40% but is a demonstration that assumes the
+trigger is known, not a general unknown-trigger defense.
+
+The complete judge-readable artifacts are tracked in the repository under
+`outputs/layered_campaign/`: `results_summary.csv`,
+`label_accuracy_summary.png`, and `backdoor_accuracy_summary.png`. Detailed
+context and limitations are in `ANALYSIS_LATEST_CAMPAIGN.md`.
+
+### Reproduce the controlled campaign
+
+```bash
+python -m venv venv
+./venv/bin/pip install -r requirements.txt
+bash scripts/run_layered_campaign.sh
+```
+
+The shell script uses the GPU when CUDA is available and writes progress to
+`outputs/layered_campaign/campaign.log`. Smoke checks can be run with
+`--epochs 2` through `scripts/run_trusted_campaign.py`; smoke outputs must not
+be used as final evidence.
+
 ## Project Structure
 
 ```
@@ -39,7 +88,10 @@ Cyber-Defense/
 │   └── exp5_full_demo.py             # End-to-end demo (all phases)
 │
 ├── scripts/
-│   └── generate_graphs.py            # Build comparison charts from logs
+│   ├── generate_graphs.py            # Build historical log comparison charts
+│   ├── run_trusted_campaign.py      # One controlled label/backdoor condition
+│   ├── run_layered_campaign.sh      # Full 30-epoch campaign
+│   └── summarize_trusted_campaign.py # Judge-ready CSV and graphs
 │
 └── outputs/                           # Generated at runtime
     ├── models/                        # Saved model checkpoints (.pt)
@@ -138,7 +190,10 @@ Trains a ResNet-18 on unmodified CIFAR-10. Records per-epoch training history an
 The clean baseline has a 0% poison rate. The global `POISON_RATE = 0.05` setting is an attack default and does not modify this experiment; its log explicitly records `poison_rate: 0.0`.
 
 ### Experiment 1: Label-Flip Attack
-Flips labels of one class (airplane → truck) at 5% poison rate. A KNN label-agreement detector identifies suspicious labels, and the clean reference model supplies replacement predictions before retraining the label-corrected model.
+The attack flips airplane labels to truck labels in the attack pool. The
+controlled defense uses three-fold Cleanlab out-of-fold probabilities and
+compares confidence-based replacement with issue removal. The clean model is
+an evaluation baseline; it is not used as a label-correction teacher.
 
 ### Experiment 2: Backdoor Attack (BadNets-style)
 Injects a 3×3 white trigger patch into 5% of training images and relabels them. Shows the model achieves normal test accuracy but high Attack Success Rate (ASR) when the trigger is present.
@@ -146,16 +201,25 @@ Injects a 3×3 white trigger patch into 5% of training images and relabels them.
 The attacks use established benchmark patterns: class-conditional random label flipping and a fixed-patch BadNets-style backdoor. The normal test-accuracy chart does not apply the trigger, so a successful backdoor can have accuracy similar to the clean model; ASR on triggered images is the security measure.
 
 ### Experiment 3: Detection Pipeline
-Runs four independent detectors against the backdoor-poisoned dataset:
+The historical detector comparison runs four independent detectors against the
+backdoor-poisoned dataset:
 1. **Loss Outlier** — flags high-loss samples after training
 2. **Spectral Signatures** — SVD-based outlier scores per class
 3. **Activation Clustering** — PCA + KMeans minority cluster
 4. **KNN Label Agreement** — flags samples whose neighbours disagree on label
 
-Reports precision, recall, F1, and FPR for each.
+Reports precision, recall, F1, and FPR for each. Those historical detector
+results are retained for comparison; the newer layered campaign does not claim
+that its false-negative target passed until those metrics are persisted in the
+same final run.
 
 ### Experiment 4: Cleaning & Retraining
-Combines the best detectors (Spectral ∪ KNN), removes flagged samples, retrains from scratch, and verifies the backdoor ASR drops to near zero.
+The controlled campaign compares trusted-data fine-tuning, Fine-Pruning and
+FT-SAM, starting from the same poisoned checkpoint. The known-trigger filter
+and random-removal comparison remain historical demonstrations. In the latest
+campaign, model mitigation reduced ASR but did not meet the ≤5% target, which
+is shown in the judge-ready table instead of being hidden by selecting the
+best-looking run.
 
 Because this experiment uses detector output rather than the ground-truth poison set, false positives can reduce clean-test accuracy. This is an important result of the benchmark: backdoor removal can succeed while the detector still needs better precision. The reported detection metrics should therefore be considered part of the result, not evidence that every flagged sample is poisoned.
 
