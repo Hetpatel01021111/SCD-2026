@@ -43,23 +43,71 @@ def oof_cleanlab(base, attack_ids, observed_labels, trusted_ids, seed, epochs):
         for sample_id, row in indexed.items():
             probs[pos_by_id[int(sample_id)]] = row
         folds.append({"fold": fold, "held_out_ids": held_ids, "history": history})
-    issues = find_label_issues(labels=y, pred_probs=probs,
-                               return_indices_ranked_by="normalized_margin")
-    return ids, y, probs, issues, folds
+    issue_sets = {}
+    for mode in ("prune_by_noise_rate", "both"):
+        issue_sets[mode] = find_label_issues(
+            labels=y, pred_probs=probs, filter_by=mode,
+            return_indices_ranked_by="normalized_margin")
+    return ids, y, probs, issue_sets, folds
 
 
-def label_candidates(ids, labels, probs, issues, confidences=(0.70, 0.80, 0.90)):
+def label_candidates(ids, labels, probs, issue_sets, confidences=(0.70, 0.80, 0.90)):
     candidates = {}
-    issue_set = set(int(i) for i in issues)
-    for confidence in confidences:
-        corrections = {}
-        for pos in issue_set:
-            predicted = int(probs[pos].argmax())
-            if predicted != int(labels[pos]) and float(probs[pos, predicted]) >= confidence:
-                corrections[int(ids[pos])] = predicted
-        candidates[f"cleanlab_replace_{confidence:.2f}"] = {"corrections": corrections, "remove": set()}
-    candidates["cleanlab_remove"] = {"corrections": {}, "remove": {int(ids[pos]) for pos in issue_set}}
+    for mode, issues in issue_sets.items():
+        issue_set = set(int(i) for i in issues)
+        for confidence in confidences:
+            corrections = {}
+            for pos in issue_set:
+                predicted = int(probs[pos].argmax())
+                if predicted != int(labels[pos]) and float(probs[pos, predicted]) >= confidence:
+                    corrections[int(ids[pos])] = predicted
+            candidates[f"cleanlab_{mode}_replace_{confidence:.2f}"] = {"corrections": corrections, "remove": set()}
+        candidates[f"cleanlab_{mode}_remove"] = {"corrections": {}, "remove": {int(ids[pos]) for pos in issue_set}}
     return candidates
+
+
+def detection_metrics(flagged, poison_ids, universe):
+    tp = len(flagged & poison_ids); fp = len(flagged - poison_ids)
+    fn = len(poison_ids - flagged); tn = len(universe - flagged - poison_ids)
+    precision = tp / (tp + fp) if tp + fp else None
+    recall = tp / (tp + fn) if tp + fn else None
+    fpr = fp / (fp + tn) if fp + tn else None
+    f1 = 2 * precision * recall / (precision + recall) if precision and recall else None
+    return {"tp": tp, "fp": fp, "fn": fn, "tn": tn, "precision": precision,
+            "recall": recall, "f1": f1, "fpr": fpr}
+
+
+def ft_sam_step(model, images, labels, optimizer, rho=0.05):
+    """One sharpness-aware update for trusted-data backdoor mitigation."""
+    loss_fn = torch.nn.CrossEntropyLoss(); optimizer.zero_grad(set_to_none=True)
+    loss_fn(model(images), labels).backward()
+    grads = [p for p in model.parameters() if p.grad is not None]
+    norm = torch.norm(torch.stack([p.grad.norm() for p in grads]))
+    perturbations = []
+    with torch.no_grad():
+        for p in grads:
+            e = p.grad * (rho / (norm + 1e-12)); p.add_(e); perturbations.append((p, e))
+    optimizer.zero_grad(set_to_none=True); loss_fn(model(images), labels).backward()
+    with torch.no_grad():
+        for p, e in perturbations: p.sub_(e)
+    optimizer.step()
+
+
+def train_ft_sam(model, loader, epochs, seed, rho=0.05, lr=0.01):
+    """Train a copied poisoned model on trusted data with FT-SAM."""
+    torch.manual_seed(seed); model = model.to(config.DEVICE); model.train()
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+    schedule = torch.optim.lr_scheduler.MultiStepLR(optimizer, [15, 25], gamma=0.1)
+    history = []
+    for epoch in range(1, epochs + 1):
+        total = 0; running = 0.0
+        for images, labels, *_ in loader:
+            images, labels = images.to(config.DEVICE), labels.to(config.DEVICE)
+            ft_sam_step(model, images, labels, optimizer, rho)
+            running += float(torch.nn.functional.cross_entropy(model(images), labels).detach())
+            total += 1
+        schedule.step(); history.append({"epoch": epoch, "loss": running / max(total, 1)})
+    return model, history
 
 
 def attach_pruning_mask(model, trusted_loader, fraction: float):

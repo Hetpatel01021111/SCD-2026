@@ -15,7 +15,8 @@ sys.path.insert(0, str(ROOT))
 import config
 from campaign.data import (load_train_base, load_test_base, make_stratified_split,
     clean_eval_dataset, ImmutableObservedDataset, TrustedDataset, poison_labels)
-from campaign.defenses import _loader, oof_cleanlab, label_candidates, attach_pruning_mask, enforce_pruning
+from campaign.defenses import (_loader, oof_cleanlab, label_candidates, attach_pruning_mask,
+    enforce_pruning, train_ft_sam)
 from campaign.metrics import evaluate_model, evaluate_asr_and_triggered_true_accuracy
 from models.resnet import build_resnet18
 from utils.train_eval import train_model
@@ -37,8 +38,9 @@ def sha_ids(ids):
 def train_eval(base, train_ids, labels, poisoned, kind, trusted_ids, seed, epochs, out, name, remove=None, corrections=None, initial_state=None):
     # Reset initialization and loader RNGs for every paired condition.  A
     # stable digest avoids Python's process-randomized hash().
-    condition_seed = seed + int(hashlib.sha256(name.encode()).hexdigest()[:8], 16) % 100000
-    seed_everything(condition_seed)
+    # Identical initialization makes paired differences attributable to the
+    # data or defense rather than a new random model.
+    seed_everything(seed)
     remove = set(remove or ())
     corrections = dict(corrections or {})
     effective = [i for i in train_ids if i not in remove]
@@ -88,8 +90,8 @@ def run(args):
     if args.attack == "backdoor":
         results["poisoned"].update(evaluate_asr_and_triggered_true_accuracy(poison_model, test_loader))
     if args.attack == "label":
-        ids, ys, probs, issues, folds = oof_cleanlab(base, split.attack_ids, observed, split.trusted_ids, args.seed, args.epochs)
-        candidates = label_candidates(ids, ys, probs, issues)
+        ids, ys, probs, issue_sets, folds = oof_cleanlab(base, split.attack_ids, observed, split.trusted_ids, args.seed, args.epochs)
+        candidates = label_candidates(ids, ys, probs, issue_sets)
         candidate_scores = {}
         candidate_test = {}
         dev_ds = ImmutableObservedDataset(base, split.dev_ids, {i:int(base.targets[i]) for i in split.dev_ids}, set(), None, False)
@@ -99,7 +101,7 @@ def run(args):
             candidate_scores[name] = evaluate_model(model, dev_loader)
             candidate_test[name] = evaluate_model(model, test_loader)
         selected = max(candidate_scores, key=lambda n: (candidate_scores[n]["accuracy"], -len(candidates[n]["corrections"])))
-        results.update({"oof_issue_count": len(issues), "folds": folds, "candidate_scores": candidate_scores,
+        results.update({"oof_issue_count": {k: len(v) for k, v in issue_sets.items()}, "folds": folds, "candidate_scores": candidate_scores,
                         "selected_test": candidate_test[selected], "selected_defense": selected,
                         "selection_source": "development split"})
     else:
@@ -120,6 +122,12 @@ def run(args):
         ft, _ = train_eval(base, split.trusted_ids, {i:int(base.targets[i]) for i in split.trusted_ids}, set(), None, (), args.seed, args.epochs, out, "trusted_finetune", initial_state=poison_model.state_dict())
         candidate_scores["trusted_finetune"] = evaluate_model(ft, dev_loader) | evaluate_asr_and_triggered_true_accuracy(ft, dev_loader)
         candidate_test["trusted_finetune"] = evaluate_model(ft, test_loader) | evaluate_asr_and_triggered_true_accuracy(ft, test_loader)
+        for rho in (0.05, 0.10):
+            model = build_resnet18(compile_model=False); model.load_state_dict(poison_model.state_dict())
+            model, _ = train_ft_sam(model, _loader(TrustedDataset(base, split.trusted_ids), config.BATCH_SIZE, True, args.seed), args.epochs, args.seed, rho=rho, lr=0.01)
+            name = f"ft_sam_{rho:.2f}"; torch.save(model.state_dict(), out / f"{name}.pt")
+            candidate_scores[name] = evaluate_model(model, dev_loader) | evaluate_asr_and_triggered_true_accuracy(model, dev_loader)
+            candidate_test[name] = evaluate_model(model, test_loader) | evaluate_asr_and_triggered_true_accuracy(model, test_loader)
         baseline_dev = evaluate_model(base_model, dev_loader)["accuracy"]
         eligible = [n for n, m in candidate_scores.items() if abs(m["accuracy"] - baseline_dev) <= 1.0]
         selected = min(eligible or list(candidate_scores), key=lambda n: (candidate_scores[n].get("asr") if candidate_scores[n].get("asr") is not None else 1e9, abs(candidate_scores[n]["accuracy"] - baseline_dev)))
