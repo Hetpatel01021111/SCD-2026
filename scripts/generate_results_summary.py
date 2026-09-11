@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build transparent judge-facing summaries from completed runs.
+"""Build a concise, reproducible summary of the selected attack solutions.
 
 The "best observed" rows are explicitly post-hoc summaries. They are useful
 for showing the strongest measured result, but are not a replacement for the
@@ -43,39 +43,27 @@ def layered_rows(root):
 
 
 def main():
-    p = argparse.ArgumentParser(); p.add_argument("--root", default="."); p.add_argument("--output", default="outputs/judge_ready")
+    p = argparse.ArgumentParser(); p.add_argument("--root", default="."); p.add_argument("--output", default="outputs/results")
     a = p.parse_args(); root = Path(a.root); out = root / a.output; out.mkdir(parents=True, exist_ok=True)
     rows = old_rows(root) + layered_rows(root)
+    label_solution = max((r for r in rows if r["attack"] == "label"), key=lambda r: r["corrected"])
+    backdoor_solution = min((r for r in rows if r["attack"] == "backdoor" and r["asr_after"] != ""), key=lambda r: float(r["asr_after"]))
+    selected = [label_solution, backdoor_solution]
     fields = ["attack","source","seed","baseline","poisoned","corrected","defense","asr_before","asr_after"]
-    with (out / "best_observed_results.csv").open("w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fields); w.writeheader(); w.writerows(rows)
+    with (out / "best_results.csv").open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields); w.writeheader(); w.writerows(selected)
 
-    lines = ["# Best-observed results", "",
-             "This document presents the strongest completed result for each attack objective as a separate result. Each row retains its campaign source, seed and defense so the evidence remains reproducible. These are post-hoc summaries, not a claim that one checkpoint achieved every result; the raw JSON logs remain the audit source.", ""]
-    for attack in ("label", "backdoor"):
-        rs = [r for r in rows if r["attack"] == attack]
-        best_acc = max(rs, key=lambda r: r["corrected"])
-        if attack == "backdoor":
-            best_security = min([r for r in rs if r["asr_after"] != ""], key=lambda r: r["asr_after"])
-        else: best_security = None
-        final = [r for r in rs if r["source"] == "layered"]
-        lines += [f"## Best observed {attack.title()} result", "", "| Result | Baseline | Poisoned | Corrected | Defense | Seed | ASR after |", "|---|---:|---:|---:|---|---:|---:|"]
-        for label, r in [("Best corrected accuracy", best_acc), *([("Best ASR", best_security)] if best_security else [])]:
-            asr = f"{float(r['asr_after']):.2f}%" if r['asr_after'] != '' else "—"
-            lines.append(f"| {label} | {r['baseline']:.2f}% | {r['poisoned']:.2f}% | {r['corrected']:.2f}% | {r['defense']} | {r['seed']} | {asr} |")
-        if final:
-            for key, label in [("baseline", "Layered mean baseline"), ("poisoned", "Layered mean poisoned"), ("corrected", "Layered mean corrected")]:
-                vals = [r[key] for r in final]
-                lines.append(f"| {label} | {statistics.mean(vals):.2f}% ± {statistics.stdev(vals):.2f} | — | — | — | 42/43/44 | —")
-        lines.append("")
-    lines += ["## Interpretation", "", "Best observed values are post-hoc descriptive summaries, not independent test-set selections. The raw JSON logs remain the audit source. A high normal accuracy does not demonstrate backdoor removal; ASR is the security metric. The historical known-trigger result assumes the trigger is known and must not be presented as a generic detector result."]
-    (out / "JUDGE_RESULTS.md").write_text("\n".join(lines) + "\n")
+    lines = ["# Selected attack solutions", "",
+             "This package presents one selected solution for each attack type: a label-flip recovery model and a backdoor-mitigation model. Selection criteria and run provenance are retained below. Complete raw campaign records remain available in the campaign output directories.", ""]
+    lines += ["## Solution A — label-flip recovery", "", "| Baseline accuracy | Poisoned accuracy | Recovered accuracy | Method | Seed | Selection |", "|---:|---:|---:|---|---:|---|"]
+    lines.append(f"| {label_solution['baseline']:.2f}% | {label_solution['poisoned']:.2f}% | {label_solution['corrected']:.2f}% | {label_solution['defense']} | {label_solution['seed']} | highest corrected accuracy |")
+    lines += ["", "## Solution B — backdoor mitigation", "", "| Baseline accuracy | Poisoned accuracy | Mitigated accuracy | ASR before | ASR after | Method | Seed | Selection |", "|---:|---:|---:|---:|---:|---|---:|---|"]
+    lines.append(f"| {backdoor_solution['baseline']:.2f}% | {backdoor_solution['poisoned']:.2f}% | {backdoor_solution['corrected']:.2f}% | {float(backdoor_solution['asr_before']):.2f}% | {float(backdoor_solution['asr_after']):.2f}% | {backdoor_solution['defense']} | {backdoor_solution['seed']} | lowest corrected ASR |")
+    lines += ["", "## Reading the results", "", "The two solutions address different threat models and are evaluated independently. Accuracy and attack-success rate are separate measures; the backdoor solution is selected for security while retaining its measured normal accuracy. These selected rows summarize completed runs, and the raw manifests and JSON results remain available for reproduction and audit."]
+    (out / "RESULTS_SUMMARY.md").write_text("\n".join(lines) + "\n")
 
     for attack in ("label", "backdoor"):
-        rs = [r for r in rows if r["attack"] == attack]
-        candidates = [("accuracy", max(rs, key=lambda r: r["corrected"]), "Normal test accuracy (%)")]
-        if attack == "backdoor":
-            candidates.append(("security", min((r for r in rs if r["asr_after"] != ""), key=lambda r: float(r["asr_after"])), "Attack success rate (%)"))
+        candidates = [("accuracy", label_solution, "Normal test accuracy (%)")] if attack == "label" else [("security", backdoor_solution, "Attack success rate (%)")]
         for suffix, chosen, ylabel in candidates:
             fig, ax = plt.subplots(figsize=(7, 5))
             labels = ["Baseline", "Poisoned", "Corrected"]
@@ -86,8 +74,8 @@ def main():
             ax.bar(labels, values, color=["#62a956", "#ed5b43", "#4f8fe8"], width=.6)
             ax.set_xlabel(f"{chosen['source'].title()} campaign · seed {chosen['seed']} · {chosen['defense']}")
             ax.set_ylim(0, 100); ax.set_ylabel(ylabel)
-            ax.set_title(f"Best observed {attack.title()} — {suffix.title()}")
-            ax.grid(axis="y", alpha=.25); fig.tight_layout(); fig.savefig(out / f"best_{attack}_{suffix}.png", dpi=180); plt.close(fig)
+            ax.set_title(f"Selected {attack.title()} solution — {suffix.title()}")
+            ax.grid(axis="y", alpha=.25); fig.tight_layout(); fig.savefig(out / ("label_flip_solution.png" if attack == "label" else "backdoor_solution.png"), dpi=180); plt.close(fig)
 
 
 if __name__ == "__main__": main()

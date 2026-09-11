@@ -100,7 +100,7 @@ model from experiment 4, so do not conflate their detector metrics.
    therefore include uncontrolled initialization/training variation.
 5. Existing label graphs incorrectly say KNN/model prediction; backdoor graphs
    incorrectly say Spectral union KNN. Differential graphs use experiment 0's
-   different baseline. Preserve these as historical artifacts, not judge-ready
+   different baseline. Preserve these as historical artifacts, not selected
    summaries. The tables in this audit use the actual methods and paired values.
 6. No triggered true-label accuracy, corrected confusion matrices, baseline
    triggered evaluation or statistical uncertainty beyond three run values is

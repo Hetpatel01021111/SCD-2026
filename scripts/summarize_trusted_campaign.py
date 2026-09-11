@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate judge-readable summaries only from complete trusted-campaign runs."""
+"""Generate summaries only from complete trusted-campaign runs."""
 import argparse, json
 from pathlib import Path
 import numpy as np

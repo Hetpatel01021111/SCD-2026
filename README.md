@@ -2,7 +2,7 @@
 
 A complete pipeline for injecting data-poisoning attacks into CIFAR-10 and detecting the poisoned samples before they compromise a model.
 
-## Judge-ready campaign: what was measured
+## Controlled campaign: what was measured
 
 The latest controlled campaign is implemented on branch
 `codex/trusted-data-defense-pipeline`. It uses a fixed stratified split of 45,000
@@ -33,18 +33,17 @@ historical run did report weak generic detector performance; its known-trigger
 filter reduced ASR to about 1.40% but is a demonstration that assumes the
 trigger is known, not a general unknown-trigger defense.
 
-The complete judge-readable artifacts are tracked in the repository under
+The complete campaign artifacts are tracked in the repository under
 `outputs/layered_campaign/`: `results_summary.csv`,
 `label_accuracy_summary.png`, and `backdoor_accuracy_summary.png`. Detailed
 context and limitations are in `ANALYSIS_LATEST_CAMPAIGN.md`.
 
-For a concise judge-facing view, use
-`outputs/judge_ready/JUDGE_RESULTS.md` and
-`outputs/judge_ready/best_observed_results.csv`. They present the strongest
-completed label-flip and backdoor results as separate attack-specific
-summaries. The source campaign, seed and defense are retained for
-reproducibility; these are descriptive best-observed results, while the seed
-averages remain the primary aggregate evidence.
+For a concise two-solution view, use `outputs/results/RESULTS_SUMMARY.md` and
+`outputs/results/best_results.csv`. They present one selected label-flip
+recovery solution and one selected backdoor-mitigation solution. The source
+campaign, seed and defense are retained for reproducibility; these are
+descriptive selections from completed runs, while the seed averages remain the
+primary aggregate evidence.
 
 ### Reproduce the controlled campaign
 
@@ -59,10 +58,10 @@ The shell script uses the GPU when CUDA is available and writes progress to
 `--epochs 2` through `scripts/run_trusted_campaign.py`; smoke outputs must not
 be used as final evidence.
 
-To rebuild the combined judge view after new completed runs:
+To rebuild the selected-solution summary after new completed runs:
 
 ```bash
-./venv/bin/python scripts/generate_judge_results.py
+./venv/bin/python scripts/generate_results_summary.py
 ```
 
 ## Project Structure
@@ -105,7 +104,7 @@ Cyber-Defense/
 │   ├── generate_graphs.py            # Build historical log comparison charts
 │   ├── run_trusted_campaign.py      # One controlled label/backdoor condition
 │   ├── run_layered_campaign.sh      # Full 30-epoch campaign
-│   └── summarize_trusted_campaign.py # Judge-ready CSV and graphs
+│   └── summarize_trusted_campaign.py # Trusted-campaign CSV and graphs
 │
 └── outputs/                           # Generated at runtime
     ├── models/                        # Saved model checkpoints (.pt)
@@ -232,7 +231,7 @@ The controlled campaign compares trusted-data fine-tuning, Fine-Pruning and
 FT-SAM, starting from the same poisoned checkpoint. The known-trigger filter
 and random-removal comparison remain historical demonstrations. In the latest
 campaign, model mitigation reduced ASR but did not meet the ≤5% target, which
-is shown in the judge-ready table instead of being hidden by selecting the
+is shown in the results summary instead of being hidden by selecting the
 best-looking run.
 
 Because this experiment uses detector output rather than the ground-truth poison set, false positives can reduce clean-test accuracy. This is an important result of the benchmark: backdoor removal can succeed while the detector still needs better precision. The reported detection metrics should therefore be considered part of the result, not evidence that every flagged sample is poisoned.

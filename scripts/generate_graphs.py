@@ -325,7 +325,7 @@ def _label_bar_values(ax, bars, baseline=None):
 
 
 def plot_label_flip_detector_corrector():
-    """Judge-facing summary of the label-flip detector and correction."""
+    """Summary of the label-flip detector and correction."""
     log1 = load_log("exp1_label_flip_attack")
     if not log1 or "label_corrected_test_accuracy" not in log1["results"]:
         print("  [Skip] Label-correction results missing (need exp1 rerun).")
@@ -364,7 +364,7 @@ def plot_label_flip_detector_corrector():
 
 
 def plot_backdoor_detector_corrector():
-    """Judge-facing summary of backdoor detection, cleaning, and ASR."""
+    """Summary of backdoor detection, cleaning, and ASR."""
     log4 = load_log("exp4_cleaning_and_retrain")
     if not log4:
         print("  [Skip] Backdoor cleaning results missing (need exp4).")
@@ -540,7 +540,7 @@ def plot_dashboard():
     ax.set_title("Detector Performance\n(F1 score)", fontsize=12)
     ax.grid(axis="x", alpha=0.3)
 
-    fig.suptitle("Data Poisoning & Detection — Judge Summary", fontsize=16, y=1.01)
+    fig.suptitle("Data Poisoning & Detection — Campaign Summary", fontsize=16, y=1.01)
     fig.text(0.5, 0.985,
              "Normal accuracy can look unchanged under a backdoor; the triggered-test ASR is the decisive security measure.",
              ha="center", va="top", fontsize=10, color="#444444")

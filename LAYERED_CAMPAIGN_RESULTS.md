@@ -42,5 +42,5 @@ proof of unknown-trigger detection. Historical known-trigger results are kept
 separate because they use a stronger assumption.
 
 Use `results_summary.csv` for machine-readable values and the two PNG files for
-the judge-facing accuracy figures. Do not treat a high normal accuracy as
+the accuracy figures. Do not treat a high normal accuracy as
 evidence that a backdoor is absent; ASR is the relevant triggered metric.
