@@ -38,6 +38,13 @@ The complete judge-readable artifacts are tracked in the repository under
 `label_accuracy_summary.png`, and `backdoor_accuracy_summary.png`. Detailed
 context and limitations are in `ANALYSIS_LATEST_CAMPAIGN.md`.
 
+For a combined view of the historical and layered campaigns, use
+`outputs/judge_ready/JUDGE_RESULTS.md` and
+`outputs/judge_ready/comparative_results.csv`. This view reports the best
+observed corrected accuracy and the best observed backdoor ASR separately,
+with the source campaign, seed and defense shown for each row. It is a
+descriptive summary; the seed averages remain the primary comparison.
+
 ### Reproduce the controlled campaign
 
 ```bash
@@ -50,6 +57,12 @@ The shell script uses the GPU when CUDA is available and writes progress to
 `outputs/layered_campaign/campaign.log`. Smoke checks can be run with
 `--epochs 2` through `scripts/run_trusted_campaign.py`; smoke outputs must not
 be used as final evidence.
+
+To rebuild the combined judge view after new completed runs:
+
+```bash
+./venv/bin/python scripts/generate_judge_results.py
+```
 
 ## Project Structure
 
