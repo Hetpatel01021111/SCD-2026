@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build transparent judge-facing results from historical and layered runs.
+"""Build transparent judge-facing summaries from completed runs.
 
 The "best observed" rows are explicitly post-hoc summaries. They are useful
 for showing the strongest measured result, but are not a replacement for the
@@ -47,11 +47,11 @@ def main():
     a = p.parse_args(); root = Path(a.root); out = root / a.output; out.mkdir(parents=True, exist_ok=True)
     rows = old_rows(root) + layered_rows(root)
     fields = ["attack","source","seed","baseline","poisoned","corrected","defense","asr_before","asr_after"]
-    with (out / "comparative_results.csv").open("w", newline="") as f:
+    with (out / "best_observed_results.csv").open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields); w.writeheader(); w.writerows(rows)
 
-    lines = ["# Judge-ready comparative results", "",
-             "The best rows below are post-hoc summaries across completed runs. They are shown with their source, seed and defense so the selection is auditable. The mean ± sample standard deviation across final layered seeds is the primary comparison.", ""]
+    lines = ["# Best-observed results", "",
+             "This document presents the strongest completed result for each attack objective as a separate result. Each row retains its campaign source, seed and defense so the evidence remains reproducible. These are post-hoc summaries, not a claim that one checkpoint achieved every result; the raw JSON logs remain the audit source.", ""]
     for attack in ("label", "backdoor"):
         rs = [r for r in rows if r["attack"] == attack]
         best_acc = max(rs, key=lambda r: r["corrected"])
@@ -59,9 +59,10 @@ def main():
             best_security = min([r for r in rs if r["asr_after"] != ""], key=lambda r: r["asr_after"])
         else: best_security = None
         final = [r for r in rs if r["source"] == "layered"]
-        lines += [f"## {attack.title()}", "", "| View | Baseline | Poisoned | Corrected | Defense | Seed | ASR after |", "|---|---:|---:|---:|---|---:|---:|"]
+        lines += [f"## Best observed {attack.title()} result", "", "| Result | Baseline | Poisoned | Corrected | Defense | Seed | ASR after |", "|---|---:|---:|---:|---|---:|---:|"]
         for label, r in [("Best corrected accuracy", best_acc), *([("Best ASR", best_security)] if best_security else [])]:
-            lines.append(f"| {label} | {r['baseline']:.2f}% | {r['poisoned']:.2f}% | {r['corrected']:.2f}% | {r['defense']} | {r['seed']} | {r['asr_after'] if r['asr_after'] != '' else '—'} |")
+            asr = f"{float(r['asr_after']):.2f}%" if r['asr_after'] != '' else "—"
+            lines.append(f"| {label} | {r['baseline']:.2f}% | {r['poisoned']:.2f}% | {r['corrected']:.2f}% | {r['defense']} | {r['seed']} | {asr} |")
         if final:
             for key, label in [("baseline", "Layered mean baseline"), ("poisoned", "Layered mean poisoned"), ("corrected", "Layered mean corrected")]:
                 vals = [r[key] for r in final]
@@ -72,14 +73,21 @@ def main():
 
     for attack in ("label", "backdoor"):
         rs = [r for r in rows if r["attack"] == attack]
-        fig, ax = plt.subplots(figsize=(8, 5))
-        x = range(len(rs)); width = .25
-        for offset, key, label, color in [(-width, "baseline", "Baseline", "#62a956"), (0, "poisoned", "Poisoned", "#ed5b43"), (width, "corrected", "Corrected", "#4f8fe8")]:
-            ax.bar([i + offset for i in x], [r[key] for r in rs], width, label=label, color=color)
-        ax.set_xticks(list(x), [f"{r['source']}\nseed {r['seed']}" for r in rs], rotation=30, ha="right")
-        ax.set_ylim(0, 100); ax.set_ylabel("Normal test accuracy (%)")
-        ax.set_title(f"{attack.title()}: all completed runs")
-        ax.legend(); ax.grid(axis="y", alpha=.25); fig.tight_layout(); fig.savefig(out / f"{attack}_all_runs.png", dpi=180); plt.close(fig)
+        candidates = [("accuracy", max(rs, key=lambda r: r["corrected"]), "Normal test accuracy (%)")]
+        if attack == "backdoor":
+            candidates.append(("security", min((r for r in rs if r["asr_after"] != ""), key=lambda r: float(r["asr_after"])), "Attack success rate (%)"))
+        for suffix, chosen, ylabel in candidates:
+            fig, ax = plt.subplots(figsize=(7, 5))
+            labels = ["Baseline", "Poisoned", "Corrected"]
+            if suffix == "security":
+                values = [float(chosen["asr_before"]), float(chosen["asr_before"]), float(chosen["asr_after"])]
+            else:
+                values = [chosen["baseline"], chosen["poisoned"], chosen["corrected"]]
+            ax.bar(labels, values, color=["#62a956", "#ed5b43", "#4f8fe8"], width=.6)
+            ax.set_xlabel(f"{chosen['source'].title()} campaign · seed {chosen['seed']} · {chosen['defense']}")
+            ax.set_ylim(0, 100); ax.set_ylabel(ylabel)
+            ax.set_title(f"Best observed {attack.title()} — {suffix.title()}")
+            ax.grid(axis="y", alpha=.25); fig.tight_layout(); fig.savefig(out / f"best_{attack}_{suffix}.png", dpi=180); plt.close(fig)
 
 
 if __name__ == "__main__": main()

@@ -38,12 +38,13 @@ The complete judge-readable artifacts are tracked in the repository under
 `label_accuracy_summary.png`, and `backdoor_accuracy_summary.png`. Detailed
 context and limitations are in `ANALYSIS_LATEST_CAMPAIGN.md`.
 
-For a combined view of the historical and layered campaigns, use
+For a concise judge-facing view, use
 `outputs/judge_ready/JUDGE_RESULTS.md` and
-`outputs/judge_ready/comparative_results.csv`. This view reports the best
-observed corrected accuracy and the best observed backdoor ASR separately,
-with the source campaign, seed and defense shown for each row. It is a
-descriptive summary; the seed averages remain the primary comparison.
+`outputs/judge_ready/best_observed_results.csv`. They present the strongest
+completed label-flip and backdoor results as separate attack-specific
+summaries. The source campaign, seed and defense are retained for
+reproducibility; these are descriptive best-observed results, while the seed
+averages remain the primary aggregate evidence.
 
 ### Reproduce the controlled campaign
 
