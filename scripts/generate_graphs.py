@@ -1,14 +1,14 @@
 """
 Generate comparison graphs from experiment logs.
 
-Reads JSON logs from ``outputs/logs/`` and produces publication-quality
+Reads JSON logs from the configured log directory and produces publication-quality
 charts comparing baseline, poisoned, and post-cleaning performance.
 
 Usage:
     python scripts/generate_graphs.py          # generate all graphs
     python scripts/generate_graphs.py --help   # show options
 
-Generated plots are saved to ``outputs/plots/``.
+Generated plots are saved to the configured plot directory.
 """
 
 import json
@@ -562,7 +562,7 @@ def main():
     # List available logs
     logs = load_all_logs()
     if not logs:
-        print("\n  ⚠  No log files found in outputs/logs/.")
+        print("\n  ⚠  No log files found in the configured log directory.")
         print("  Run experiments first:  python run_all.py")
         return
 

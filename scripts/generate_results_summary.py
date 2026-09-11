@@ -5,21 +5,21 @@ The "best observed" rows are explicitly post-hoc summaries. They are useful
 for showing the strongest measured result, but are not a replacement for the
 mean across seeds or a pre-registered final selection.
 """
-import argparse, csv, json, statistics
+import argparse, csv, json
 from pathlib import Path
 import matplotlib.pyplot as plt
 
 
 def old_rows(root):
     rows = []
-    for path in sorted((root / "outputs/validated/campaign").glob("seed-*-rate-005/logs/exp1_label_flip_attack.json")):
+    for path in sorted((root / "outputs/archive/testing/validated_historical/campaign").glob("seed-*-rate-005/logs/exp1_label_flip_attack.json")):
         r = json.loads(path.read_text())["results"]
         seed = path.parts[-3].split("-")[1]
         rows.append({"attack":"label", "source":"historical", "seed":seed,
             "baseline":r["clean_test_accuracy"], "poisoned":r["poisoned_test_accuracy"],
             "corrected":r["label_corrected_test_accuracy"], "defense":"Cleanlab/legacy correction",
             "asr_before":"", "asr_after":""})
-    for path in sorted((root / "outputs/validated/campaign").glob("seed-*-rate-005/logs/exp4_cleaning_and_retrain.json")):
+    for path in sorted((root / "outputs/archive/testing/validated_historical/campaign").glob("seed-*-rate-005/logs/exp4_cleaning_and_retrain.json")):
         r = json.loads(path.read_text())["results"]
         seed = path.parts[-3].split("-")[1]
         rows.append({"attack":"backdoor", "source":"historical", "seed":seed,

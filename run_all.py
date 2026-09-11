@@ -79,7 +79,7 @@ def main():
     print("║   DATA POISONING & DETECTION — EXPERIMENT RUNNER         ║")
     print("╚" + "═" * 58 + "╝")
     print(f"\n  Experiments to run: {selected}")
-    print(f"  Logs directory: outputs/logs/\n")
+    print(f"  Logs directory: {config.LOG_DIR}\n")
 
     completed = list(completed_prior) if args.resume else []
     for exp_id in selected:

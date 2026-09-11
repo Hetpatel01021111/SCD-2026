@@ -2,48 +2,43 @@
 
 A complete pipeline for injecting data-poisoning attacks into CIFAR-10 and detecting the poisoned samples before they compromise a model.
 
-## Controlled campaign: what was measured
+## Controlled campaign: selected solutions
 
-The latest controlled campaign is implemented on branch
-`codex/trusted-data-defense-pipeline`. It uses a fixed stratified split of 45,000
+The latest controlled campaign uses a fixed stratified split of 45,000
 attack-pool images, 2,000 trusted clean images and 3,000 development images;
 the untouched 10,000-image CIFAR-10 test set is used only for final evaluation.
 Sample IDs remain the original CIFAR-10 IDs. The defenses receive observed
 images and labels plus the trusted subset; poison membership and original clean
 labels are evaluation-only metadata.
 
-The campaign ran ResNet-18 for 30 epochs with fixed seeds and separate output
-directories for label and backdoor conditions. The 5% results below are means
-across seeds 42, 43 and 44; values are percentages and “pp” means percentage
-points.
+The campaign ran ResNet-18 for 30 epochs with fixed seeds. The active solution
+artifacts are in `outputs/results/`; values are percentages and “pp” means
+percentage points.
 
-| Measure | Baseline | Poisoned | Selected correction | Change from poisoned |
+| Measure | Baseline | Poisoned | Selected solution | Change from poisoned |
 |---|---:|---:|---:|---:|
-| Label-flip normal accuracy | 88.94 | 86.61 | 87.78 | +1.17 pp |
-| Backdoor normal accuracy | 88.94 | 89.89 | 88.95 | −0.94 pp |
-| Backdoor ASR (lower is better) | — | 96.31 | 83.62 | −12.69 pp |
+| Label-flip normal accuracy | 90.24 | 87.33 | 88.65 | +1.32 pp |
+| Backdoor normal accuracy | 89.55 | 89.99 | 89.52 | −0.47 pp |
+| Backdoor ASR (lower is better) | 95.33 | 95.33 | 1.22 | −94.11 pp |
 
-The label defense recovered 1.17 pp on average but remained 1.16 pp below
-baseline. The backdoor defense preserved normal accuracy within 1 pp of
-baseline on average, but ASR remained far above the ≤5% target. The targets are
-reported as acceptance criteria rather than treated as guaranteed outcomes.
+The selected label-flip solution recovered 1.32 pp from the poisoned model and
+remained 1.59 pp below its baseline. The selected backdoor solution reduced ASR
+to 1.22% while remaining 0.03 pp below its baseline. These are selected
+completed-run results; they are not averages across every run.
 Generic detector precision, recall, F1 and FPR were not persisted by this
 campaign, so the false-negative target is not claimed as passed. The earlier
 historical run did report weak generic detector performance; its known-trigger
 filter reduced ASR to about 1.40% but is a demonstration that assumes the
 trigger is known, not a general unknown-trigger defense.
 
-The complete campaign artifacts are tracked in the repository under
-`outputs/layered_campaign/`: `results_summary.csv`,
-`label_accuracy_summary.png`, and `backdoor_accuracy_summary.png`. Detailed
-context and limitations are in `ANALYSIS_LATEST_CAMPAIGN.md`.
+The complete active campaign artifacts are tracked under
+`outputs/layered_campaign/`. Older, smoke, and legacy artifacts are retained in
+`outputs/archive/testing/` and are excluded from the active presentation.
 
 For a concise two-solution view, use `outputs/results/RESULTS_SUMMARY.md` and
 `outputs/results/best_results.csv`. They present one selected label-flip
 recovery solution and one selected backdoor-mitigation solution. The source
-campaign, seed and defense are retained for reproducibility; these are
-descriptive selections from completed runs, while the seed averages remain the
-primary aggregate evidence.
+campaign, seed and defense are retained for reproducibility.
 
 ### Reproduce the controlled campaign
 
@@ -101,15 +96,15 @@ Cyber-Defense/
 │   └── exp5_full_demo.py             # End-to-end demo (all phases)
 │
 ├── scripts/
-│   ├── generate_graphs.py            # Build historical log comparison charts
+│   ├── generate_graphs.py            # Build legacy log charts
 │   ├── run_trusted_campaign.py      # One controlled label/backdoor condition
 │   ├── run_layered_campaign.sh      # Full 30-epoch campaign
 │   └── summarize_trusted_campaign.py # Trusted-campaign CSV and graphs
 │
-└── outputs/                           # Generated at runtime
-    ├── models/                        # Saved model checkpoints (.pt)
-    ├── plots/                         # All generated PNG charts
-    └── logs/                          # Structured JSON logs (one per experiment)
+└── outputs/
+    ├── layered_campaign/              # Active 30-epoch campaign artifacts
+    ├── results/                       # Selected solution report and graphs
+    └── archive/testing/               # Smoke, legacy, and historical records
 ```
 
 ## Hardware Requirements
@@ -154,10 +149,10 @@ Or pick specific ones via `run_all.py`:
 
 ## Logging
 
-Every experiment writes a structured JSON log to `outputs/logs/`:
+Legacy experiments write structured JSON logs to `outputs/archive/testing/legacy_logs/`:
 
 ```
-outputs/logs/
+outputs/archive/testing/legacy_logs/
 ├── exp0_clean_baseline.json
 ├── exp1_label_flip_attack.json
 ├── exp2_backdoor_attack.json
@@ -173,25 +168,18 @@ Each JSON file contains:
 
 ## Graph Generation
 
-After running experiments, generate all comparison charts at once:
+After running experiments, generate the selected-solution graphs with:
 
 ```bash
-./venv/bin/python scripts/generate_graphs.py
+./venv/bin/python scripts/generate_results_summary.py
 ```
 
-This produces the comparison charts in `outputs/plots/`:
+The active graphs are written to `outputs/results/`:
 
 | Chart | What it shows |
 |-------|---------------|
-| `graph_training_curves.png` | Loss & accuracy over epochs for baseline, poisoned, and cleaned models |
-| `graph_accuracy_comparison.png` | Test accuracy bars: clean vs label-flip vs backdoor vs cleaned |
-| `graph_asr_comparison.png` | Backdoor Attack Success Rate before vs after cleaning |
-| `graph_detector_comparison.png` | Precision / Recall / F1 for all 4 detection methods |
-| `graph_per_class_accuracy.png` | Per-class accuracy: clean vs label-flip poisoned |
-| `graph_dashboard.png` | 4-panel summary combining accuracy, ASR, training curves, and detector F1 |
-| `graph_label_flip_detector_corrector.png` | Label-flip accuracy recovery and KNN detector-corrector metrics |
-| `graph_backdoor_detector_corrector.png` | Backdoor accuracy, ASR, and Spectral ∪ KNN cleaning result |
-| `graph_differential_accuracy.png` | Baseline / Label / Backdoor accuracy before and after detector-correction |
+| `label_flip_solution.png` | Baseline, poisoned, and selected label-flip recovery accuracy |
+| `backdoor_solution.png` | Baseline, poisoned, and selected backdoor ASR |
 
 The script gracefully skips any chart whose prerequisite logs are missing.
 
@@ -250,7 +238,7 @@ All four phases in one script:
 - **`persistent_workers=True`**: DataLoader workers stay alive between epochs (avoids respawn overhead on Threadripper).
 - **`n_jobs=-1`** in sklearn KNN: uses all Threadripper cores for neighbour search.
 - **Deterministic detection**: Detection passes use a separate no-augmentation loader so results are reproducible.
-- **Centralised logging**: All results go to `outputs/logs/` as JSON, enabling reproducible graph generation at any time.
+- **Centralised logging**: Active results remain grouped by campaign; legacy logs are archived for reproducibility.
 
 ## References
 
@@ -275,7 +263,7 @@ Install the complete environment with `pip install -r requirements.txt` and
 run a reproducible experiment set with:
 
     python run_all.py 0 1 2 3 4 --seed 42 --poison-rate 0.05 \
-        --run-dir outputs/validated/seed-42-rate-05
+        --run-dir outputs/archive/testing/validated_historical/seed-42-rate-05
 
 The untouched CIFAR-10 test set is used for final accuracy. Backdoor ASR is
 reported separately on non-target test images after applying the trigger.

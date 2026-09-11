@@ -12,7 +12,7 @@ import config
 
 
 class ExperimentLogger:
-    """Accumulates results and writes them as a JSON file to outputs/logs/."""
+    """Accumulates results and writes them as a JSON file to the configured output log directory."""
 
     def __init__(self, experiment_name: str, poison_rate: Optional[float] = None):
         """Create a logger for one experiment.

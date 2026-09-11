@@ -2,7 +2,7 @@
 
 ## Completion and evidence
 
-Audited `outputs/validated/campaign`, containing five completed manifests and
+Audited `outputs/archive/testing/validated_historical/campaign`, containing five completed manifests and
 25 experiment logs (experiments 0–4 for each condition). All 40 saved training
 histories contain 30 epochs. The three internal Cleanlab fold histories are
 not saved; the source runs them with the same epoch budget, but their individual
